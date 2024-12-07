@@ -116,197 +116,138 @@ Position INVALID_POSITION(INT_MIN, INT_MIN);
 
 class Map {
 private:
-	int x = -1;
-	std::vector<std::set<Position, Position::RowLess>> rowObstacles;
-	std::vector<std::set<Position, Position::ColumnLess>> colObstacles;
+	std::vector<std::string> map;
 public:
 	Map() {}
 
-	bool isWithin(const Position& pos) {
+	bool isWithin(const Position& pos) const {
 		return !isOutside(pos);
 	}
 
-	bool isOutside(const Position& pos) {
-		return pos.x < 0 || pos.x >= x || pos.y < 0 || pos.y >= getSizeY();
+	bool isOutside(const Position& pos) const {
+		return pos.x < 0 || pos.x >= getSizeX() || pos.y < 0 || pos.y >= getSizeY();
 	}
 
-	void addObstacle(Position pos) {
-		rowObstacles[pos.y].insert(pos);
-		colObstacles[pos.x].insert(pos);
+	void addObstacle(const Position& pos) {
+		map[pos.y][pos.x] = '#';
 	}
 
-	void removeObstacle(Position pos) {
-		rowObstacles[pos.y].erase(pos);
-		colObstacles[pos.x].erase(pos);
+	void removeObstacle(const Position& pos) {
+		map[pos.y][pos.x] = '.';
 	}
 
-	void addRow() {
-		rowObstacles.push_back({});
+	void addRow(std::string row) {
+		map.push_back(row);
 	}
 
 	bool isBlocked(Position pos) const {
-		return rowObstacles[pos.y].find(pos) != rowObstacles[pos.y].end();
+		return map[pos.y][pos.x] == '#';
 	}
 
-	Position getFuturePosition(const Position& player, const Vec& movement, bool &done) const {
-		done = false;
-		std::set<Position>::const_iterator it;
-		bool increasing = (movement.x > 0) || (movement.y > 0);
-		if (movement.x != 0)
-		{			
-			auto& obstacles = rowObstacles[player.y];
-			if (increasing) {
-				it = std::upper_bound(obstacles.cbegin(), obstacles.cend(), player);
-				if (it == obstacles.end()) {
-					done = true;
-					return Position(getSizeX() - 1, player.x);
-				}
-			}
-			else
-			{
-				it = std::lower_bound(obstacles.cbegin(), obstacles.cend(), player);
-				if (it == obstacles.begin()) {
-					done = true;
-					return Position(0, player.y);
-				}
-				it--;
-			}
-		}
-		else if (movement.y != 0) {
-			auto& obstacles = colObstacles[player.x];			
-
-			if (increasing) {
-				it = std::upper_bound(obstacles.cbegin(), obstacles.cend(), player);
-				if (it == obstacles.end()) {
-					done = true;
-					return Position(player.x, getSizeY() - 1);
-				}
-			}
-			else
-			{
-				it = std::lower_bound(obstacles.cbegin(), obstacles.cend(), player);
-				if (it == obstacles.begin()) {
-					done = true;
-					return Position(player.x, 0);
-				}
-				it--;
-			}			
-		}
-		else
-		{
-			throw std::invalid_argument("invalid movement");
-		}
-		
-		return *it - movement;
-	}
-
-	int getSizeX() const { return x; }
-	void setSizeX(int x) {
-		if (this->x != x) {
-			colObstacles.resize(x);
-		}
-		this->x = x;
-	}
-	int getSizeY() const { return static_cast<int>(rowObstacles.size()); }
+	int getSizeX() const { return static_cast<int>(map[0].size()); }
+	int getSizeY() const { return static_cast<int>(map.size()); }
 
 	std::string to_string(Position player, Vec movement) const {
 		std::ostringstream os;
 		for (int i = 0; i < getSizeY(); i++)
 		{
-			std::string line(getSizeX(), '.');
-			if (player.y == i) {
-				line[player.x] = movement.toChar();
-			}
-			for (auto obstacle : rowObstacles[i]) {
-				line[obstacle.x] = '#';
-			}
-			os << line << std::endl;
+			os << map[i] << std::endl;
 		}
 		return os.str();
 	}
 };
 
 Map loadMap(Position &player, Vec &movement, const std::string &file = "input") {
-	std::regex re(R"(\^|v|<|>|#)");
+	std::regex re(R"(\^|v|<|>)");
 	std::ifstream in(file);
 	std::string line;
 	Map map;
 
 	int lineCounter = 0;
 	while (std::getline(in, line), !in.fail()) {
-		map.setSizeX(static_cast<int>(line.size()));
-		map.addRow();
-		int lastX = 0;
-		for (std::sregex_iterator it = std::sregex_iterator(line.begin(), line.end(), re); it != std::sregex_iterator(); it++)
+		map.addRow(line);
+		std::smatch match;
+		if (std::regex_search(line, match, re))
 		{
-			std::smatch match = *it;
-			int x = static_cast<int>(match.prefix().str().size()) + lastX;
-			lastX = x + match.size();
-			if (match.str()[0] == '#')
-			{
-				map.addObstacle(Position{ x, lineCounter });
-			}
-			else
-			{
-				movement = Vec(match.str()[0]);
-				player = Position{ x, lineCounter };
-			}
+			int x = static_cast<int>(match.prefix().str().size());
+			movement = Vec(match.str()[0]);
+			player = Position{ x, lineCounter };
 		}
+
 		lineCounter++;
 	}
 	return map;
 }
 
-std::unordered_set<Position, Position::HashFunction> simulateWalkVisits(const Map& map, Position startPos, Vec startMov) {
-	bool done = false;
+std::unordered_set<Position, Position::HashFunction> simulateWalkVisits(const Map& map, Position startPos, Vec startMov, Position &endPos, Vec &endMov, int steps = INT_MAX) {
 	Position playerPos = startPos;
 	Vec movement = startMov;
 	std::unordered_set<Position, Position::HashFunction> visited;
-	visited.insert(playerPos);
+	int counter = 0;
+	while (counter < steps) {
+		visited.insert(playerPos);
+		auto newPos = playerPos + movement;
 
-	while (!done) {
-		auto newPos = map.getFuturePosition(playerPos, movement, done);
-		if (playerPos == newPos && !done)
+		if (map.isOutside(newPos))
+		{
+			break;
+		}
+
+		if (map.isBlocked(newPos))
 		{
 			movement = movement.rotateRight();
 		}
 		else
-		{
-			while (playerPos != newPos) {				
-				playerPos = playerPos + movement;
-				visited.insert(playerPos);
-			}
+		{	
+			playerPos = playerPos + movement;
+			counter++;
 		}
 		//SetConsoleCursorPosition(cli, coord);
 		//std::cout << map.to_string(position, movement) << std::endl;
 		//std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	}
+
+	endPos = playerPos;
+	endMov = movement;
 	return visited;
 }
 
-bool isFiniteWalkHelper(const Map& map, Position startPos, Vec startMov, Position &prevEndPos, Position& endPos, Vec &endMov, int steps = INT_MAX) {
-	bool done = false;
+std::unordered_set<Position, Position::HashFunction> simulateWalkVisits(const Map& map, Position startPos, Vec startMov) {
+	Position discardPos;
+	Vec discardMov;
+	return simulateWalkVisits(map, startPos, startMov, discardPos, discardMov);
+}
+
+bool simulateWalk(const Map& map, Position startPos, Vec startMov, Position& endPos, Vec& endMov, int steps = INT_MAX) {
 	Position playerPos = startPos;
 	Vec movement = startMov;
 	int counter = 0;
-	while (!done && counter < steps) {
-		auto newPos = map.getFuturePosition(playerPos, movement, done);
-		if (playerPos == newPos && !done)
+	while (counter < steps) {
+		auto newPos = playerPos + movement;
+
+		if (map.isOutside(newPos))
+		{
+			endPos = playerPos;
+			endMov = movement;
+			return false;
+		}
+
+		if (map.isBlocked(newPos))
 		{
 			movement = movement.rotateRight();
 		}
 		else
 		{
-			prevEndPos = playerPos;
 			playerPos = newPos;
 			counter++;
 		}
+		//SetConsoleCursorPosition(cli, coord);
+		//std::cout << map.to_string(position, movement) << std::endl;
+		//std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	}
-
 	endPos = playerPos;
 	endMov = movement;
-
-	return done;
+	return map.isWithin(playerPos);
 }
 
 bool isCycledWalk(const Map& map, Position startPos, Vec startMov) {
@@ -319,46 +260,13 @@ bool isCycledWalk(const Map& map, Position startPos, Vec startMov) {
 
 	bool run = true;
 	while (run) {
-		if (isFiniteWalkHelper(map, playerPosFast, movementFast, playerPosFastPrev, playerPosFast, movementFast, 2)) {
+		if (!simulateWalk(map, playerPosFast, movementFast, playerPosFast, movementFast, 2)) {
 			return false;
 		}
-		isFiniteWalkHelper(map, playerPosSlow, movementSlow, playerPosSlowPrev, playerPosSlow, movementSlow, 1);
-		run = (playerPosFast != playerPosSlow || playerPosFastPrev != playerPosSlowPrev);
+		simulateWalk(map, playerPosSlow, movementSlow, playerPosSlow, movementSlow, 1);
+		run = playerPosFast != playerPosSlow || movementFast != movementSlow;
 	}
 	return true;
-}
-
-std::unordered_set<Position, Position::HashFunction> findObstacleCandidates(const Map& map, Position startPos, Vec startMov) {
-	bool done = false, candidateDone = false;
-	Position playerPos = startPos;
-	Vec movement = startMov;
-	std::unordered_set<Position, Position::HashFunction> candidates;
-
-	while (!done) {
-		auto newPos = map.getFuturePosition(playerPos, movement, done);
-		if (playerPos == newPos && !done)
-		{
-			movement = movement.rotateRight();
-		}
-		else
-		{
-			while (playerPos != newPos) {
-				if (!map.isBlocked(playerPos + movement)) {
-					Vec candidateDirection = movement.rotateRight();
-					Position candidateRedirectionPosition = map.getFuturePosition(playerPos, candidateDirection, candidateDone);
-
-					if (!candidateDone)
-					{
-						candidates.insert(playerPos + movement);
-					}
-				}
-
-				playerPos = playerPos + movement;
-			}
-		}
-	}
-	candidates.erase(startPos);
-	return candidates;
 }
 
 int main()
@@ -367,11 +275,10 @@ int main()
 	Position playerPos;
 	Vec movement;
 	Map map = loadMap(playerPos, movement, "input.old");
-	//auto visited = simulateWalkVisits(map, playerPos, movement);
+	auto visited = simulateWalkVisits(map, playerPos, movement);
 	auto start = std::chrono::high_resolution_clock::now();
-	auto obstacles = findObstacleCandidates(map, playerPos, movement);
 	size_t counter = 0;
-	for (auto obstacle : obstacles) {
+	for (auto obstacle : visited) {
 		map.addObstacle(obstacle);
 		auto isCycled = isCycledWalk(map, playerPos, movement);
 		map.removeObstacle(obstacle);
@@ -382,8 +289,7 @@ int main()
 		}
 	}
 
-	//std::cout << visited.size() << std::endl;
-	std::cout << obstacles.size() << std::endl;
+	std::cout << visited.size() << std::endl;
 	std::cout << counter << std::endl;
 	auto end = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> duration = end - start;
