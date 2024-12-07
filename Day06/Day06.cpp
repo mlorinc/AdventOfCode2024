@@ -52,6 +52,13 @@ struct Vec {
 		if (x == 1 && y == 0) return '>';
 		throw std::invalid_argument("invalid vector values for direction");
 	}
+
+	uint8_t getMask() {
+		if (x == 0 && y == -1) return 0x01;
+		if (x == 0 && y == 1) return 0x02;
+		if (x == -1 && y == 0) return 0x04;
+		if (x == 1 && y == 0) return 0x08;
+	}
 };
 
 struct Position {
@@ -218,53 +225,49 @@ std::unordered_set<Position, Position::HashFunction> simulateWalkVisits(const Ma
 	return simulateWalkVisits(map, startPos, startMov, discardPos, discardMov);
 }
 
-bool simulateWalk(const Map& map, Position startPos, Vec startMov, Position& endPos, Vec& endMov, int steps = INT_MAX) {
-	Position playerPos = startPos;
-	Vec movement = startMov;
+bool simulateWalk(const Map& map, Position &pos, Vec &mov, std::vector<uint8_t> &directionMap, bool &cycle, int steps = INT_MAX) {
 	int counter = 0;
 	while (counter < steps) {
-		auto newPos = playerPos + movement;
+		auto newPos = pos + mov;
 
 		if (map.isOutside(newPos))
 		{
-			endPos = playerPos;
-			endMov = movement;
 			return false;
 		}
 
 		if (map.isBlocked(newPos))
 		{
-			movement = movement.rotateRight();
+			mov = mov.rotateRight();
 		}
 		else
 		{
-			playerPos = newPos;
+			pos = newPos;
+
+			if (directionMap[pos.y * map.getSizeX() + pos.x] & mov.getMask()) {
+				cycle = true;
+				return true;
+			}
+
+			directionMap[pos.y * map.getSizeX() + pos.x] |= mov.getMask();
 			counter++;
 		}
 		//SetConsoleCursorPosition(cli, coord);
 		//std::cout << map.to_string(position, movement) << std::endl;
 		//std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	}
-	endPos = playerPos;
-	endMov = movement;
-	return map.isWithin(playerPos);
+	return map.isWithin(pos);
 }
 
-bool isCycledWalk(const Map& map, Position startPos, Vec startMov) {
-	bool done = false;
-	
-	Position playerPosSlow = startPos, playerPosFast = startPos;
-	Position playerPosSlowPrev, playerPosFastPrev;
-	Vec movementSlow = startMov, movementFast = startMov;
-	
+bool isCycledWalk(const Map& map, Position startPos, Vec startMov, std::vector<uint8_t> &directionMap) {
+	std::fill(directionMap.begin(), directionMap.end(), 0);	
+	Position playerPos = startPos;
+	Vec mov = startMov;
 
-	bool run = true;
-	while (run) {
-		if (!simulateWalk(map, playerPosFast, movementFast, playerPosFast, movementFast, 2)) {
+	bool cycle = false;
+	while (!cycle) {
+		if (!simulateWalk(map, playerPos, mov, directionMap, cycle)) {
 			return false;
 		}
-		simulateWalk(map, playerPosSlow, movementSlow, playerPosSlow, movementSlow, 1);
-		run = playerPosFast != playerPosSlow || movementFast != movementSlow;
 	}
 	return true;
 }
@@ -275,12 +278,13 @@ int main()
 	Position playerPos;
 	Vec movement;
 	Map map = loadMap(playerPos, movement, "input.old");
+	std::vector<uint8_t> directionMap(map.getSizeX() * map.getSizeY(), 0);
 	auto visited = simulateWalkVisits(map, playerPos, movement);
 	auto start = std::chrono::high_resolution_clock::now();
 	size_t counter = 0;
 	for (auto obstacle : visited) {
 		map.addObstacle(obstacle);
-		auto isCycled = isCycledWalk(map, playerPos, movement);
+		auto isCycled = isCycledWalk(map, playerPos, movement, directionMap);
 		map.removeObstacle(obstacle);
 
 		if (isCycled)
