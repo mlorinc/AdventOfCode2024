@@ -83,16 +83,18 @@ VecSet findAntinodes(const std::unordered_map<char, VecList> &antenas, int gridx
 				const Vec& b = frequencyAntenas[j];
 
 				Vec diff = b - a;
-				Vec aPos = a - diff;
-				Vec bPos = b + diff;
-
-				if (aPos.in(gridx, gridy))
+				Vec aPos = a;
+				while (aPos.in(gridx, gridy))
 				{
 					antinodes.insert(aPos);
+					aPos = aPos - diff;
 				}
-				if (bPos.in(gridx, gridy))
+
+				Vec bPos = b;
+				while (bPos.in(gridx, gridy))
 				{
 					antinodes.insert(bPos);
+					bPos = bPos + diff;
 				}
 			}
 		}
