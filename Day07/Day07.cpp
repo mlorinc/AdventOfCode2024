@@ -10,6 +10,7 @@
 #include <sstream>
 #include <chrono>
 #include <omp.h>
+#include <windows.h>
 
 using Number = size_t;
 
@@ -28,7 +29,7 @@ Number concat(Number a, Number b) {
 using Op = Number(Number a, Number b);
 std::array<std::function<Op>, 3> operators = { mul, plus, concat };
 
-std::vector<Number> calculate(Number index, std::vector<Number> values, Number reference) {
+std::vector<Number> calculateHelper(Number index, const std::vector<Number> &values, Number reference) {
 	Number size = index;
 	if (index == 0)
 	{
@@ -36,7 +37,7 @@ std::vector<Number> calculate(Number index, std::vector<Number> values, Number r
 	}
 
 	std::vector<Number> solutions;
-	std::vector<Number> nextSolutions = calculate(index - 1, values, reference);
+	std::vector<Number> nextSolutions = calculateHelper(index - 1, values, reference);
 
 	Number a = values[index];
 	for (auto op : operators) {
@@ -51,14 +52,31 @@ std::vector<Number> calculate(Number index, std::vector<Number> values, Number r
 	return solutions;
 }
 
-struct Task {
-	Number testNum;
-	std::vector<Number> values;
-	Task(Number testNum, std::vector<Number> &&values) : testNum(testNum), values(values) {}
-};
+std::vector<Number> calculate(Number index, std::vector<Number> values, Number reference) {
+	Number size = index;
+	if (index == 0)
+	{
+		return { values[index] };
+	}
+
+	std::vector<Number> solutions;
+	std::vector<Number> nextSolutions = calculateHelper(index - 1, values, reference);
+
+	Number a = values[index];
+	for (auto op : operators) {
+		for (Number solution : nextSolutions) {
+			Number c = op(solution, a);
+			if (c <= reference)
+			{
+				solutions.push_back(c);
+			}
+		}
+	}
+	return solutions;
+}
 
 void calculateTask(Number testNum, std::vector<Number> values, Number* sums) {
-	auto solutions = calculate(values.size() - 1, values, testNum);
+	auto solutions = calculateHelper(values.size() - 1, values, testNum);
 	for (Number solution : solutions) {
 		if (solution == testNum) {
 			sums[omp_get_thread_num()] += testNum;
