@@ -78,6 +78,7 @@ Vec invalidVector(-1, -1);
 using Grid = std::vector<std::vector<int>>;
 using MemoryGrid = std::vector<std::vector<Vec>>;
 using EndVisits = std::unordered_map<Vec, std::unordered_set<Vec, Vec::HashFunction>, Vec::HashFunction>;
+using EndVisitsSecondPart = std::unordered_map<Vec, int, Vec::HashFunction>;
 
 void pushValid(std::vector<Vec> &neighbors, const Grid& grid, int level, Vec pos) {
 	if (!(0 <= pos.x && pos.x < grid[0].size() && 0 <= pos.y && pos.y < grid.size()))
@@ -102,7 +103,7 @@ std::vector<Vec> getNeighbors(const Grid &grid, Vec pos) {
 	return neighbors;
 }
 
-void djikstra(const Grid& grid, EndVisits &visits, Vec start) {
+void djikstraFirstPart(const Grid& grid, EndVisits &visits, Vec start) {
 	std::queue<Vec> q;
 	q.push(start);
 
@@ -123,6 +124,27 @@ void djikstra(const Grid& grid, EndVisits &visits, Vec start) {
 	}
 }
 
+void djikstraSecondPart(const Grid& grid, EndVisitsSecondPart& visits, Vec start) {
+	std::queue<Vec> q;
+	q.push(start);
+
+	while (!q.empty()) {
+		auto pos = q.front();
+		q.pop();
+
+		if (grid[pos.y][pos.x] == 9)
+		{
+			visits[start]++;
+		}
+		else {
+			auto neighbours = getNeighbors(grid, pos);
+			for (auto& n : neighbours) {
+				q.push(n);
+			}
+		}
+	}
+}
+
 int main()
 {
     std::ifstream in("input");
@@ -130,6 +152,7 @@ int main()
 	Grid grid;
 	std::vector<Vec> starts;
 	EndVisits visits;
+	EndVisitsSecondPart visitsSecond;
 
 	int lineNum = 0;
 	while (in >> line) {
@@ -144,6 +167,7 @@ int main()
 			{
 				starts.push_back(Vec(i, lineNum));				
 				visits[Vec(i, lineNum)] = {};
+				visitsSecond[Vec(i, lineNum)] = 0;
 			}
 		}
 		grid.push_back(std::move(l));
@@ -151,13 +175,19 @@ int main()
 	}
 
 	for (Vec start : starts) {
-		djikstra(grid, visits, start);
+		//djikstraFirstPart(grid, visits, start);
+		djikstraSecondPart(grid, visitsSecond, start);
 	}
 
 	size_t sum = 0;
-	for (auto visit : visits) {
-		sum += visit.second.size();
+	//for (auto visit : visits) {
+	//	sum += visit.second.size();
+	//}
+
+	for (auto visit : visitsSecond) {
+		sum += visit.second;
 	}
+
 	std::cout << sum << std::endl;
 	return 0;
 }
