@@ -14,7 +14,6 @@
 #include <thread>
 #include <unordered_set>
 #include <Windows.h>
-#include <chrono>
 #include <array>
 
 
@@ -297,7 +296,6 @@ int main()
 	std::cout << counter << std::endl;
 	auto end = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> duration = end - start;
-
 	std::cout << "Execution time: " << duration.count() << " seconds" << std::endl;
 	return 0;
 }
